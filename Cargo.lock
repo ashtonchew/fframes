@@ -4094,7 +4094,6 @@ dependencies = [
  "ash",
  "fframes",
  "fframes_skia_renderer",
- "png",
  "serde_json",
 ]
 
