@@ -279,6 +279,12 @@ impl<'b> SkiaEncoderFrameRenderer<'b> {
         })
     }
 
+    /// Uses these cache limits and clears previously cached render resources.
+    pub fn with_cache_config(mut self, config: crate::SkiaCacheConfig) -> Self {
+        self.render_cache = crate::render::RenderCache::with_config(config);
+        self
+    }
+
     /// The way the frames of this renderer take to the encoder.
     pub fn path(&self) -> FrameExportPath {
         match self.target {

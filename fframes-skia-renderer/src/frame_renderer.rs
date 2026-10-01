@@ -65,6 +65,7 @@ pub fn apply_fit(canvas: &Canvas, tree: &usvgr::Tree, width: i32, height: i32) {
 /// GPU context and render cache between frames.
 pub struct SkiaFrameRenderer<'a, TBackend: SkiaBackend> {
     backend: &'a TBackend,
+    cache_config: crate::SkiaCacheConfig,
     surface: Option<SkiaContext>,
     render_cache: crate::render::RenderCache,
 }
@@ -80,7 +81,7 @@ impl<TBackend: SkiaBackend> SkiaFrameRenderer<'_, TBackend> {
         }) = self.surface.take()
         {
             // what lives on the context goes first
-            self.render_cache = crate::render::RenderCache::new();
+            self.render_cache = crate::render::RenderCache::with_config(self.cache_config);
             drop(surface);
             drop(reader);
             let _queue = lock_queue(queue_lock.as_ref());
@@ -99,13 +100,25 @@ impl<'a, TBackend: SkiaBackend> SkiaFrameRenderer<'a, TBackend> {
     pub fn new(backend: &'a TBackend) -> Self {
         Self {
             backend,
+            cache_config: crate::SkiaCacheConfig::default(),
             surface: None,
             render_cache: crate::render::RenderCache::new(),
         }
     }
+
+    /// Uses these cache limits for subsequent frames. Clears previously cached render resources.
+    pub fn with_cache_config(mut self, config: crate::SkiaCacheConfig) -> Self {
+        self.cache_config = config;
+        self.render_cache = crate::render::RenderCache::with_config(config);
+        self
+    }
 }
 
 impl<TBackend: SkiaBackend> FrameRenderer for SkiaFrameRenderer<'_, TBackend> {
+    fn svg_text_cache_capacity(&self) -> Option<usize> {
+        Some(self.cache_config.text_capacity)
+    }
+
     fn render_tree(
         &mut self,
         tree: &usvgr::Tree,
