@@ -404,7 +404,8 @@ fn render_frames<TBackend: SkiaBackend>(
         encoder_input,
         ctx.current_video_size.width as u32,
         ctx.current_video_size.height as u32,
-    )?.with_cache_config(cache_config);
+    )?
+    .with_cache_config(cache_config);
 
     while let Some((claim, tree)) = {
         #[cfg(feature = "debug")]

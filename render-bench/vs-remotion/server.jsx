@@ -9,7 +9,7 @@ registerRoot(() => (
     width={1000}
     height={1000}
     fps={30}
-    durationInFrames={33}
+    durationInFrames={603}
     defaultProps={{ fontCss: "" }}
   />
 ));

@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { isolated } from "./process.mjs";
 import { createHash } from "node:crypto";
 import { bundle } from "@remotion/bundler";
@@ -12,6 +12,19 @@ import { engines, summarize, markdown } from "./report.mjs";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
 const args = process.argv.slice(2);
+if (process.platform === "darwin") {
+  const awake = spawn(
+    "/usr/bin/caffeinate",
+    ["-i", "-w", String(process.pid)],
+    {
+      stdio: "ignore",
+    }
+  );
+  awake.on("error", error =>
+    console.error(`Preventing idle sleep failed: ${error}`)
+  );
+  awake.unref();
+}
 const option = (name, fallback) => {
   const i = args.indexOf(`--${name}`);
   return i < 0 ? fallback : args[i + 1];
@@ -92,9 +105,9 @@ if (args[0] === "--worker") {
   }
   const plan = {
     nodes: 100000,
-    effect_passes: 12,
+    effect_passes: 0,
     rounds: 3,
-    frames: 30,
+    frames: 600,
     warmup: 3,
     timeout: 600000,
     backends: ["cpu", "skia-gpu-if-available"],
@@ -147,8 +160,9 @@ if (args[0] === "--worker") {
       fps: 30,
       audio: false,
     },
+    workload_revision: "100k-600-frames-100-text-effects-v1",
     workload:
-      "20 animated panels: 99,000 overlapping 16–28px rectangles, 8px blurred saturated glows, 12px drop shadows, and 1,000 changing DM Sans text digits painted last",
+      "20 animated panels: 99,000 overlapping 16–28px rectangles, 8px blurred saturated glows, 12px drop shadows, and 1,000 changing DM Sans text digits painted last; 100 text nodes have seeded animated blur, hue-shifting glow, or moving shadows; 10,000 rectangles smoothly resize between 16 and 28 pixels. Remotion uses one keyed component with its own useCurrentFrame hook per drawable node and per animated text filter; the parent memoizes the component tree",
     plan,
     environment: {
       platform: os.platform(),

@@ -30,15 +30,18 @@ async function exportVideo(config, name, frameRange) {
     outputWritable: stream,
     logLevel: "warn",
     onProgress: ({ encodedFrames }) => {
-      if (encodedFrames % 5 === 0)
-        fetch("/progress", {
-          method: "POST",
-          body: JSON.stringify({ name, encodedFrames }),
-        });
+      fetch("/progress", {
+        method: "POST",
+        body: JSON.stringify({ name, encodedFrames }),
+      });
     },
     // Remotion omits duration; give the last frame its full interval in the MP4.
     onFrame: frame => {
       const index = Math.round((frame.timestamp * 30) / 1_000_000);
+      fetch("/progress", {
+        method: "POST",
+        body: JSON.stringify({ name, capturedFrame: index }),
+      });
       const duration =
         Math.round(((index + 1) * 1_000_000) / 30) - frame.timestamp;
       return new VideoFrame(frame, { duration });

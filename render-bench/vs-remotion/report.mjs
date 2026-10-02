@@ -78,9 +78,9 @@ export function markdown(report) {
   return [
     "# fframes vs Remotion + FFmpeg and Remotion + MediaBunny",
     "",
-    "One 1000×1000 scene: 99,000 rectangles and 1,000 changing text digits in 20 panels with blur, glow and shadows. Both Remotion paths share the same React component: unkeyed lists with 12 dependent effect/state updates per element. Results describe this workload.",
+    "One 1000×1000 scene: 99,000 rectangles and 1,000 changing text digits in 20 panels with blur, glow and shadows. 100 text nodes have seeded animated blur, hue-shifting glow or moving shadows; 10,000 rectangles smoothly resize between 16 and 28 pixels. Both Remotion paths share the same scene: one keyed component with its own useCurrentFrame hook per drawable node and per animated text filter, with a memoized parent tree. This deliberately stresses 100,100 frame-hook subscriptions. Results describe this workload, not Remotion videos in general.",
     "",
-    "Median of three complete 30-frame H.264 MP4 exports, each after a three-frame MP4 warm-up. Includes rendering, pixel conversion, encoder setup, encoding, draining, muxing and file writes. Compilation, media preparation, browser launch, bundling and warm-up are excluded. MediaBunny writes to the browser’s origin-private file system; copying the completed file to the host for validation is excluded. Output frame counts and durations are checked after timing.",
+    "Median of three complete 600-frame (20-second) H.264 MP4 exports, each after a three-frame MP4 warm-up. Includes rendering, pixel conversion, encoder setup, encoding, draining, muxing and file writes. Compilation, media preparation, browser launch, bundling and warm-up are excluded. MediaBunny writes to the browser’s origin-private file system; copying the completed file to the host for validation is excluded. Output frame counts and durations are checked after timing.",
     "",
     "| Pipeline | Encoder | Complete MP4 export | Speedup vs Remotion + FFmpeg | Speedup vs Remotion + MediaBunny |",
     "|---|---|---:|---:|---:|",

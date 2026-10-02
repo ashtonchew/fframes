@@ -45,7 +45,10 @@ impl<'a, TSkiaBackend: SkiaBackend> SkiaFFramesRenderer<'a, TSkiaBackend> {
 impl<TBackend: SkiaBackend> FFramesRenderBackend for SkiaFFramesRenderer<'_, TBackend> {
     /// Skia previews on the same GPU context: shaders and filters look like in the video.
     fn frame_renderer(&self) -> Option<impl FrameRenderer + '_> {
-        Some(crate::SkiaFrameRenderer::new(self.backend).with_cache_config(self.pipeline_config.cache))
+        Some(
+            crate::SkiaFrameRenderer::new(self.backend)
+                .with_cache_config(self.pipeline_config.cache),
+        )
     }
 
     fn negotiate_encoder_input(
@@ -61,8 +64,10 @@ impl<TBackend: SkiaBackend> FFramesRenderBackend for SkiaFFramesRenderer<'_, TBa
         width: u32,
         height: u32,
     ) -> FFramesRendererResult<impl EncoderFrameRenderer + '_> {
-        Ok(SkiaEncoderFrameRenderer::new(self.backend, self.frame_export, input, width, height)?
-            .with_cache_config(self.pipeline_config.cache))
+        Ok(
+            SkiaEncoderFrameRenderer::new(self.backend, self.frame_export, input, width, height)?
+                .with_cache_config(self.pipeline_config.cache),
+        )
     }
 
     fn render_frame<'a, 'media: 'a, TVideo: Video + Sync + Sized>(
