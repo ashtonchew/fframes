@@ -37,10 +37,11 @@ Measured on an M5 Max, one run each:
 | Pipeline                   | Complete MP4 export | fframes GPU speedup |
 | -------------------------- | ------------------: | ------------------: |
 | fframes + Skia GPU         |             7.225 s |                   — |
+| fframes CPU (tiny-skia)    |            69.740 s |               9.65× |
 | Remotion + FFmpeg, 18 tabs |           109.227 s |              15.12× |
 | Remotion + MediaBunny      |           121.132 s |              16.77× |
 
-CPU was not measured on this scene. The FFmpeg browser used default software
+CPU uses software x264 encoding. The FFmpeg browser used default software
 rasterization with hardware encoding; MediaBunny's Chrome reported Metal.
 An eight-tab FFmpeg check was faster at 98.759 s (13.67× versus fframes GPU).
 The fixed comparison above uses the requested 18 tabs.

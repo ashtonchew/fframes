@@ -86,7 +86,7 @@ fn race(lb: f32) -> Svgr<'static> {
             let done_at = RACE_START + RACE_BEATS * secs / slowest();
             let stamp = snap(lb - done_at);
             let flash = if done { (-(lb - done_at) * 6.0).exp() } else { 0.0 };
-            let frames_done = (30.0 * p).floor() as u32;
+            let frames_done = (300.0 * p).floor() as u32;
             fframes::svgr!(
                 <g opacity={prog(lb, 0.6 + i as f32 * 0.3, 0.7 + i as f32 * 0.3)} transform={format!("translate({} 0)", (1.0 - appear) * -120.0)}>
                     <text x="150" y={*y} font-family={DISPLAY} font-size="58" letter-spacing="-2" fill={if i == 1 { ORANGE } else { BONE }}>{*name}</text>
@@ -95,7 +95,7 @@ fn race(lb: f32) -> Svgr<'static> {
                     <rect x="150" y={*y + 56.0} width={bar_w} height="64" fill={*color} />
                     <rect x="150" y={*y + 56.0} width="1620" height="64" fill={BONE} opacity={flash * 0.6} />
                     <text x="1770" y={*y} text-anchor="end" font-family={MONO} font-weight="600" font-size="52" fill={if done { *color } else { BONE }}>{format!("{shown:.3}s")}</text>
-                    <text x="170" y={*y + 100.0} font-family={MONO} font-weight="600" font-size="22" letter-spacing="2" fill={INK} opacity={if bar_w > 260.0 { 1.0 } else { 0.0 }}>{format!("{frames_done} / 30 FRAMES")}</text>
+                    <text x="170" y={*y + 100.0} font-family={MONO} font-weight="600" font-size="22" letter-spacing="2" fill={INK} opacity={if bar_w > 260.0 { 1.0 } else { 0.0 }}>{format!("{frames_done} / 300 FRAMES")}</text>
                     <g opacity={if done { 1.0 } else { 0.0 }} transform={format!("translate(0 {})", (1.0 - stamp) * 20.0)}>
                         <text x="1750" y={*y + 100.0} text-anchor="end" font-family={MONO} font-weight="700" font-size="24" letter-spacing="4" fill={INK}>"DONE"</text>
                     </g>
@@ -106,7 +106,7 @@ fn race(lb: f32) -> Svgr<'static> {
     fframes::svgr!(
         <g opacity={1.0 - exit}>
             {Slam::new(150.0, 250.0, "100,000 TEXT NODES", DISPLAY, 120.0, BONE).draw(lb, 0.0, 140.0)}
-            {label(154.0, 310.0, "30 FRAMES · 1000×1000 · H.264 MP4 · SAME LAYOUT, SAME FONT".to_owned(), GREY, 20.0, "start")}
+            {label(154.0, 310.0, "300 FRAMES · 3840×2160 · H.264 MP4 · SAME LAYOUT, SAME FONT".to_owned(), GREY, 20.0, "start")}
             {rows}
             <g opacity={prog(lb, RACE_START, RACE_START + 0.2)}>
                 {label(1770.0, 310.0, format!("TIME-LAPSE ×{speedup:.1} · MEASURED WALL CLOCK"), ORANGE, 20.0, "end")}
