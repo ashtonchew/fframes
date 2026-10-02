@@ -11,16 +11,16 @@ mod convert;
 mod filters;
 mod fingerprint;
 mod image;
+mod occlusion;
 mod resources;
 mod shader;
 
 pub use shader::compile_shader;
 
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::sync::Arc;
 
-use fframes::usvgr;
+use fframes::usvgr::{self, ahash::AHashMap};
 use skia_safe::{Canvas, Matrix};
 
 use convert::{PathConverter, convert_blend_mode, to_skia_paint, to_skia_stroke_paint};
@@ -45,15 +45,15 @@ struct Cached<T> {
 /// getting stolen back into `current`, so the cache is bounded by roughly two
 /// frames worth of entries.
 struct Generational<T> {
-    current: HashMap<u64, Cached<T>>,
-    previous: HashMap<u64, Cached<T>>,
+    current: AHashMap<u64, Cached<T>>,
+    previous: AHashMap<u64, Cached<T>>,
 }
 
 impl<T> Default for Generational<T> {
     fn default() -> Self {
         Self {
-            current: HashMap::new(),
-            previous: HashMap::new(),
+            current: AHashMap::new(),
+            previous: AHashMap::new(),
         }
     }
 }
@@ -130,6 +130,8 @@ impl<T> Generational<T> {
 /// (see [`Generational`]).
 #[derive(Default)]
 pub struct RenderCache {
+    #[cfg(test)]
+    disable_occlusion: bool,
     /// `static_hash` → converted `skia_safe::Path`
     paths: Generational<skia_safe::Path>,
     path_converter: PathConverter,
@@ -154,7 +156,7 @@ pub struct RenderCache {
     filtered_layers: Generational<FilteredLayer>,
     /// `static_hash` → whether the static subtree contains filters, such subtrees are
     /// not recorded as pictures so the filtered groups inside can be rasterized.
-    static_has_filters: HashMap<u64, bool>,
+    static_has_filters: AHashMap<u64, bool>,
 }
 
 struct FilteredLayer {
@@ -256,8 +258,11 @@ pub fn render_tree(tree: &usvgr::Tree, canvas: &Canvas, cache: &mut RenderCache)
 }
 
 fn render_nodes(parent: &usvgr::Group, canvas: &Canvas, cache: &mut RenderCache) {
-    for node in parent.children() {
-        render_node(node, canvas, cache);
+    let visible = occlusion::visible_nodes(parent, canvas, cache);
+    for (i, node) in parent.children().iter().enumerate() {
+        if visible.as_ref().is_none_or(|visible| visible[i]) {
+            render_node(node, canvas, cache);
+        }
     }
 }
 
