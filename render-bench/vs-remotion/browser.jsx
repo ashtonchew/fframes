@@ -1,5 +1,5 @@
 import { renderMediaOnWeb } from "@remotion/web-renderer";
-import { GridVideo } from "./scene.jsx";
+import { GridVideo, WIDTH, HEIGHT } from "./scene.jsx";
 
 let fontCss = "";
 
@@ -12,8 +12,8 @@ async function exportVideo(config, name, frameRange) {
     composition: {
       id: "MixedGrid",
       component: GridVideo,
-      width: 1000,
-      height: 1000,
+      width: WIDTH,
+      height: HEIGHT,
       fps: 30,
       durationInFrames: config.warmup + config.frames,
     },
@@ -62,9 +62,9 @@ async function run() {
   const gl = document.createElement("canvas").getContext("webgl");
   const debug = gl?.getExtension("WEBGL_debug_renderer_info");
   const support = await VideoEncoder.isConfigSupported({
-    codec: "avc1.640020",
-    width: 1000,
-    height: 1000,
+    codec: "avc1.640033",
+    width: WIDTH,
+    height: HEIGHT,
     bitrate: 8_000_000,
     framerate: 30,
     hardwareAcceleration: "prefer-hardware",
@@ -84,6 +84,7 @@ async function run() {
   return {
     ...result,
     encoder: "webcodecs-h264",
+    audio: false,
     hardware_acceleration_preference: "prefer-hardware",
     codec_configuration: support.config,
     renderer: "@remotion/web-renderer renderMediaOnWeb",

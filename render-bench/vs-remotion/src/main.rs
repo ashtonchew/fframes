@@ -7,60 +7,40 @@ use fframes::{
     cpu::CpuRenderingBackend,
 };
 use fframes_skia_renderer::{
-    SkiaBackend, SkiaCacheConfig, SkiaFFramesRenderer, SkiaPipelineConfig,
+    SkiaBackend, SkiaCacheConfig, SkiaFFramesRenderer, SkiaPipelineConcurrencyPolicy,
+    SkiaPipelineConfig,
 };
 
 fframes::include_media_dir!(struct BenchMedia, "render-bench/vs-remotion/media");
 
-const SIDE: usize = 1000;
-const RECTANGLES: usize = 99_000;
+const VIDEO_WIDTH: usize = 3840;
+const VIDEO_HEIGHT: usize = 2160;
+const CIRCLES: usize = 99_000;
 const TEXTS: usize = 1000;
-const NODES: usize = RECTANGLES + TEXTS;
+const NODES: usize = CIRCLES + TEXTS;
 const PANELS: usize = 20;
 const PER_PANEL: usize = NODES / PANELS;
 const TEXT_STEP: usize = NODES / TEXTS;
-const TEXT_EFFECTS: usize = 100;
-const TEXT_EFFECT_STEP: usize = NODES / TEXT_EFFECTS;
 const CACHE_CAPACITY: usize = 100_000;
-const FRAMES: usize = 600;
+const FRAMES: usize = 300;
 const WARMUP: usize = 3;
-const CPU: CpuRenderingBackend = CpuRenderingBackend {
-    cache_capacity: 20,
-    concurrency: 1,
-    text_cache_capacity: CACHE_CAPACITY,
-};
 const CACHE: SkiaCacheConfig = SkiaCacheConfig {
     text_capacity: CACHE_CAPACITY,
     geometry_capacity: CACHE_CAPACITY,
     geometry_bytes: CACHE_CAPACITY * 512,
 };
 
-fn text_effect(slot: usize, frame: usize) -> Svgr<'static> {
-    let seed = (slot as u32 + 1).wrapping_mul(0x9e37_79b1);
-    let seed = seed ^ (seed >> 16);
-    let phase = (seed as usize % 240 + frame * (1 + 2 * ((seed >> 16) as usize % 2))) % 240;
-    let amount = f64::from(120 - (phase as i32 - 120).abs()) / 120.;
-    let blur = 0.5 + amount * 2.;
-    let hue = (seed as usize % 360 + frame * (1 + (seed >> 20) as usize % 5)) % 360;
-    let effect = match seed % 3 {
-        0 => vec![fframes::svgr!(<feGaussianBlur stdDeviation={blur} />)],
-        1 => vec![
-            fframes::svgr!(<feGaussianBlur stdDeviation={blur} result="glow" />),
-            fframes::svgr!(<feColorMatrix in="glow" type="hueRotate" values={hue.to_string()} result="tinted" />),
-            fframes::svgr!(<feMerge><feMergeNode in="tinted" /><feMergeNode in="SourceGraphic" /></feMerge>),
-        ],
-        _ => vec![
-            fframes::svgr!(<feDropShadow dx={-3. + amount * 6.} dy={1. + amount * 3.}
-            stdDeviation={0.5 + amount} flood-color="#000" flood-opacity={0.35 + amount * 0.4} />),
-        ],
-    };
-    fframes::svgr!(<filter id={format!("node-effect-{slot}")} x="-100%" y="-100%"
-        width="300%" height="300%" color-interpolation-filters="sRGB">{effect}</filter>)
+fn cpu_backend() -> CpuRenderingBackend {
+    CpuRenderingBackend {
+        concurrency: fframes::get_thread_count(),
+        text_cache_capacity: CACHE_CAPACITY,
+        ..Default::default()
+    }
 }
 
-fn rect_size(slot: usize, frame: usize) -> (f64, f64) {
+fn circle_radius(slot: usize, frame: usize) -> f64 {
     if slot % 10 != 1 {
-        return ((16 + slot % 4 * 4) as f64, (16 + slot / 4 % 4 * 4) as f64);
+        return (16 + slot % 4 * 4) as f64;
     }
     let phase = ((slot + frame) % 60) as f64;
     let (progress, from, to) = if phase <= 30. {
@@ -69,16 +49,15 @@ fn rect_size(slot: usize, frame: usize) -> (f64, f64) {
         ((phase - 30.) / 30., 28., 16.)
     };
     let amount = progress * progress * (3. - 2. * progress);
-    let width = amount * (to - from) + from;
-    (width, 44. - width)
+    amount * (to - from) + from
 }
 
 struct Grid;
 
 impl Video for Grid {
     const FPS: usize = 30;
-    const WIDTH: usize = SIDE;
-    const HEIGHT: usize = SIDE;
+    const WIDTH: usize = VIDEO_WIDTH;
+    const HEIGHT: usize = VIDEO_HEIGHT;
     const BACKGROUND_COLOR: Color = Color::hex("#18202c");
     fn duration(&self) -> Duration<'_> {
         Duration::Frames(FRAMES + WARMUP)
@@ -87,50 +66,40 @@ impl Video for Grid {
         AudioMap::none()
     }
     fn render_frame<'a>(&'a self, frame: Frame, _ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
-        let effects: Vec<_> = (0..NODES)
-            .step_by(TEXT_EFFECT_STEP)
-            .map(|slot| text_effect(slot, frame.index))
+        let panels: Vec<_> = (0..PANELS)
+            .map(|panel| {
+                let circles: Vec<_> = (panel * PER_PANEL..(panel + 1) * PER_PANEL)
+                    .filter(|slot| slot % TEXT_STEP != 0)
+                    .map(|slot| {
+                        let id = (slot + frame.index * 37) % NODES;
+                        let radius = circle_radius(slot, frame.index);
+                        let fill = Color::rgba(
+                            ((id * 13 + frame.index * 17) % 256) as u8,
+                            ((id * 7 + frame.index * 29) % 256) as u8,
+                            ((id * 3 + frame.index * 43) % 256) as u8,
+                            255,
+                        );
+                        fframes::svgr!(<circle cx={32 + (slot * 13 + frame.index * 3) % 128}
+                        cy={32 + (slot * 17 + frame.index * 5) % 176}
+                        r={radius} fill={fill} />)
+                    })
+                    .collect();
+                let transform =
+                    Transform::translate((panel % 5 * 200) as f64, (panel / 5 * 250) as f64);
+                fframes::svgr!(<g transform={transform}>{circles}</g>)
+            })
             .collect();
-        let panels: Vec<_> = (0..PANELS).map(|panel| {
-            let rectangles: Vec<_> = (panel * PER_PANEL..(panel + 1) * PER_PANEL)
-                .filter(|slot| slot % TEXT_STEP != 0).map(|slot| {
-                    let id = (slot + frame.index * 37) % NODES;
-                    let (width, height) = rect_size(slot, frame.index);
-                    let fill = Color::rgba(
-                        ((id * 13 + frame.index * 17) % 256) as u8,
-                        ((id * 7 + frame.index * 29) % 256) as u8,
-                        ((id * 3 + frame.index * 43) % 256) as u8, 255);
-                    fframes::svgr!(<rect x={24 + (slot * 13 + frame.index * 3) % 128}
-                        y={24 + (slot * 17 + frame.index * 5) % 176}
-                        width={width} height={height} fill={fill} />)
-                }).collect();
-            let transform = Transform::translate((panel % 5 * 200) as f64, (panel / 5 * 250) as f64);
-            fframes::svgr!(<g transform={transform} filter="url(#panel-effects)">{rectangles}</g>)
-        }).collect();
         let texts: Vec<_> = (0..NODES).step_by(TEXT_STEP).map(|slot| {
             let panel = slot / PER_PANEL;
             let index = slot % PER_PANEL / TEXT_STEP;
             let id = (slot + frame.index * 37) % NODES;
-            let filter = if slot % TEXT_EFFECT_STEP == 0 {
-                format!("url(#node-effect-{slot})")
-            } else {
-                "none".to_owned()
-            };
-            fframes::svgr!(<text filter={filter} x={panel % 5 * 200 + 24 + index % 10 * 16}
+            fframes::svgr!(<text x={panel % 5 * 200 + 24 + index % 10 * 16}
                 y={panel / 5 * 250 + 40 + index / 10 * 40}
                 font-family="DM Sans" font-size="16" fill="#fff">{((id + frame.index) % 10).to_string()}</text>)
         }).collect();
         fframes::svgr!(
-            <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000">
-                <defs>
-                    {effects}
-                    <filter id="panel-effects" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
-                        <feGaussianBlur stdDeviation="8" result="glow" />
-                        <feColorMatrix in="glow" type="saturate" values="1.8" result="bright" />
-                        <feMerge><feMergeNode in="bright" /><feMergeNode in="SourceGraphic" /></feMerge>
-                        <feDropShadow dx="4" dy="8" stdDeviation="12" flood-color="#000" flood-opacity="0.7" />
-                    </filter>
-                </defs>
+            <svg xmlns="http://www.w3.org/2000/svg" width={VIDEO_WIDTH} height={VIDEO_HEIGHT}
+                viewBox="0 0 1000 1000" preserveAspectRatio="none">
                 {panels}
                 {texts}
             </svg>
@@ -140,7 +109,10 @@ impl Video for Grid {
 
 #[cfg(target_os = "macos")]
 fn gpu_backend() -> Result<fframes_skia_renderer::metal::SkiaMetalCtx, Box<dyn std::error::Error>> {
-    Ok(fframes_skia_renderer::metal::SkiaMetalCtx::new(SIDE, SIDE)?)
+    Ok(fframes_skia_renderer::metal::SkiaMetalCtx::new(
+        VIDEO_WIDTH,
+        VIDEO_HEIGHT,
+    )?)
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -168,7 +140,11 @@ fn gpu_backend() -> Result<fframes_skia_renderer::vulkan::SkiaVulkanCtx, Box<dyn
     };
     Ok(
         fframes_skia_renderer::vulkan::SkiaVulkanCtx::new_with_device(
-            entry, instance, device, SIDE, SIDE,
+            entry,
+            instance,
+            device,
+            VIDEO_WIDTH,
+            VIDEO_HEIGHT,
         )?,
     )
 }
@@ -179,7 +155,7 @@ fn main() {
     let out = Path::new(&args[2]);
     std::fs::create_dir_all(out).expect("output directory");
     match args[1].as_str() {
-        "cpu" => run(|| CPU, "cpu", out),
+        "cpu" => run(cpu_backend, "cpu", out),
         "gpu" => match gpu_backend().and_then(|backend| {
             backend.create_skia_surface()?;
             Ok(backend)
@@ -188,7 +164,7 @@ fn main() {
                 || {
                     SkiaFFramesRenderer::new(
                         SkiaPipelineConfig {
-                            encoder_threads: 1,
+                            concurrency_policy: SkiaPipelineConcurrencyPolicy::MaxPerformance,
                             cache: CACHE,
                             ..Default::default()
                         },
@@ -263,15 +239,23 @@ fn run<B: FFramesRenderBackend>(pipeline: impl Fn() -> B, name: &str, out: &Path
         unsafe { std::ffi::CStr::from_ptr(fframes::ffmpeg_sys_fframes::av_version_info()) }
             .to_string_lossy();
     let cache = if name == "cpu" {
-        serde_json::json!({"text_capacity": CPU.text_cache_capacity,
-            "layer_capacity": CPU.cache_capacity})
+        serde_json::json!({"text_capacity": cpu_backend().text_cache_capacity,
+            "layer_capacity": cpu_backend().cache_capacity})
     } else {
         serde_json::json!({"text_capacity": CACHE.text_capacity,
             "geometry_capacity": CACHE.geometry_capacity, "geometry_bytes": CACHE.geometry_bytes})
     };
+    let concurrency = if name == "cpu" {
+        serde_json::json!({"render_threads": cpu_backend().concurrency})
+    } else {
+        serde_json::json!({"policy": "MaxPerformance",
+            "encoder_threads": fframes::get_thread_count()})
+    };
     println!(
         "{}",
         serde_json::json!({"backend": name, "nodes": NODES, "cache": cache,
+            "concurrency": concurrency, "frames": FRAMES, "fps": Grid::FPS,
+            "audio": false, "width": VIDEO_WIDTH, "height": VIDEO_HEIGHT,
             "export_ms": export_ms, "ffmpeg": ffmpeg,
             "encoder": encoder_name, "hardware_encoding": hardware_encoding})
     );

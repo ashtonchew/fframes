@@ -1,15 +1,15 @@
 import React from "react";
 import { Composition, registerRoot } from "remotion";
-import { GridVideo } from "./scene.jsx";
+import { GridVideo, WIDTH, HEIGHT } from "./scene.jsx";
 
 registerRoot(() => (
   <Composition
     id="MixedGrid"
     component={GridVideo}
-    width={1000}
-    height={1000}
+    width={WIDTH}
+    height={HEIGHT}
     fps={30}
-    durationInFrames={603}
+    durationInFrames={303}
     defaultProps={{ fontCss: "" }}
   />
 ));

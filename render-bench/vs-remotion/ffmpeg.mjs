@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import os from "node:os";
 import { execFileSync } from "node:child_process";
 import {
   ensureBrowser,
@@ -39,6 +40,7 @@ export async function ffmpegWorker(config) {
     });
     const hardwareEncoding = process.platform === "darwin";
     const encoder = hardwareEncoding ? "h264_videotoolbox" : "libx264";
+    let concurrency;
     const encodingCommands = [];
     const encoding = {
       codec: "h264",
@@ -50,14 +52,15 @@ export async function ffmpegWorker(config) {
       hardwareAcceleration: hardwareEncoding ? "required" : "disable",
       colorSpace: "bt601",
       ffmpegOverride: ({ args }) => {
-        const selected = args[args.indexOf("-c:v") + 1];
-        if (selected !== "copy" && selected !== encoder)
+        const videoCodecIndex = args.indexOf("-c:v");
+        const selected = videoCodecIndex < 0 ? null : args[videoCodecIndex + 1];
+        if (selected && selected !== "copy" && selected !== encoder)
           throw new Error(`unexpected encoder: ${selected}`);
         const command = [
           ...args.slice(0, -1),
           "-threads",
           "1",
-          ...(hardwareEncoding && selected !== "copy"
+          ...(hardwareEncoding && selected === encoder
             ? ["-allow_sw", "0"]
             : []),
           args.at(-1),
@@ -72,7 +75,10 @@ export async function ffmpegWorker(config) {
       serveUrl: config.bundle,
       inputProps,
       puppeteerInstance: browser,
-      concurrency: 1,
+      concurrency: Math.min(18, os.availableParallelism()),
+      onStart: ({ resolvedConcurrency }) => {
+        concurrency = resolvedConcurrency;
+      },
       timeoutInMilliseconds: config.timeout,
       logLevel: "error",
     };
@@ -103,7 +109,7 @@ export async function ffmpegWorker(config) {
       hardware_encoding: hardwareEncoding,
       encoding_commands: encodingCommands,
       renderer: "@remotion/renderer renderMedia",
-      concurrency: 1,
+      concurrency,
       browser: execFileSync(chrome, ["--version"], {
         encoding: "utf8",
       }).trim(),
