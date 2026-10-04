@@ -3606,7 +3606,7 @@ dependencies = [
 [[package]]
 name = "svgrtypes"
 version = "0.46.1"
-source = "git+https://github.com/dmtrKovalenko/svgr?branch=feat%2Fdata-fframes-inspect#f052ec72aaaf1d375df119cf77e2a7ce0b78eb68"
+source = "git+https://github.com/dmtrKovalenko/svgr?branch=feat%2Fdata-fframes-passthrough#fc132a789279a20a31a14eee6e0698a1d8346565"
 dependencies = [
  "kurbo 0.8.3",
  "proc-macro2",
@@ -4026,7 +4026,7 @@ checksum = "81e544489bf3d8ef66c953931f56617f423cd4b5494be343d9b9d3dda037b9a3"
 [[package]]
 name = "usvgr"
 version = "0.46.1"
-source = "git+https://github.com/dmtrKovalenko/svgr?branch=feat%2Fdata-fframes-inspect#f052ec72aaaf1d375df119cf77e2a7ce0b78eb68"
+source = "git+https://github.com/dmtrKovalenko/svgr?branch=feat%2Fdata-fframes-passthrough#fc132a789279a20a31a14eee6e0698a1d8346565"
 dependencies = [
  "ahash",
  "base64 0.21.7",
@@ -4045,7 +4045,7 @@ dependencies = [
  "siphasher 1.0.1",
  "smallvec",
  "strict-num",
- "svgrtypes 0.46.1 (git+https://github.com/dmtrKovalenko/svgr?branch=feat%2Fdata-fframes-inspect)",
+ "svgrtypes 0.46.1 (git+https://github.com/dmtrKovalenko/svgr?branch=feat%2Fdata-fframes-passthrough)",
  "tiny-skia-path",
  "unicode-bidi",
  "unicode-script",

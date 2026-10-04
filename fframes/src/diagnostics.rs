@@ -16,14 +16,22 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::sync::Mutex;
 
-/// `data-fframes-inspect` value of a `<g>` whose text may leave the canvas on purpose
-/// (falling or scrolling items, entrances from off screen): the tree walk reports no clipped
-/// or off-canvas text inside it. Every other check still runs.
+/// `data-fframes-inspect` value for text that leaves the canvas on purpose (falling or
+/// scrolling items, entrances from off screen), set on the `<text>` or on any `<g>` around
+/// it: the tree walk reports no clipped or off-canvas text there. Every other check still
+/// runs. The attribute takes a space-separated list of such values.
 pub const ALLOW_OFF_CANVAS: &str = "allow-offcanvas";
 
 /// Appended to clipped and off-canvas text findings.
-const ALLOW_OFF_CANVAS_HINT: &str =
-    "if it leaves the canvas on purpose, wrap it in <g data-fframes-inspect=\"allow-offcanvas\">";
+const ALLOW_OFF_CANVAS_HINT: &str = "if it leaves the canvas on purpose, add data-fframes-inspect=\"allow-offcanvas\" to it or to a <g> around it";
+
+fn allows_off_canvas(data: &usvgr::FframesData) -> bool {
+    data.get("inspect").is_some_and(|values| {
+        values
+            .split_whitespace()
+            .any(|value| value == ALLOW_OFF_CANVAS)
+    })
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -258,11 +266,8 @@ fn inspect_group(
                 {
                     check_transforms(group, out);
                 } else {
-                    let allow_off_canvas = allow_off_canvas
-                        || group
-                            .fframes_inspect()
-                            .split_whitespace()
-                            .any(|value| value == ALLOW_OFF_CANVAS);
+                    let allow_off_canvas =
+                        allow_off_canvas || allows_off_canvas(group.fframes_data());
                     inspect_group(group, width, height, allow_off_canvas, out);
                 }
             }
@@ -273,7 +278,7 @@ fn inspect_group(
                     });
                     continue;
                 }
-                if allow_off_canvas {
+                if allow_off_canvas || allows_off_canvas(text.fframes_data()) {
                     continue;
                 }
 
@@ -394,6 +399,7 @@ mod tests {
             <g data-fframes-inspect="allow-offcanvas"><g transform="translate(0 10)">
                 <text x="150" y="50" font-size="40">falling</text>
             </g></g>
+            <text x="150" y="50" font-size="40" data-fframes-inspect="allow-offcanvas">entering</text>
         </svg>"#;
         let tree = usvgr::Tree::from_str(svg, &options, &fontdb).unwrap();
         let diagnostics = inspect_tree(&tree, 200., 100.);
@@ -411,7 +417,7 @@ mod tests {
         assert!(
             !diagnostics
                 .iter()
-                .any(|d| matches!(d, Diagnostic::TextClipped { text, .. } | Diagnostic::TextOffCanvas { text, .. } if text == "ok" || text == "scrolling" || text == "falling"))
+                .any(|d| matches!(d, Diagnostic::TextClipped { text, .. } | Diagnostic::TextOffCanvas { text, .. } if text == "ok" || text == "scrolling" || text == "falling" || text == "entering"))
         );
     }
 }
