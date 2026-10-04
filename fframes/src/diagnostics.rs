@@ -16,6 +16,17 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::sync::Mutex;
 
+/// Id prefix of a `<g>` whose text may leave the canvas on purpose (falling or scrolling
+/// items, entrances from off screen): the tree walk reports no clipped or off-canvas text
+/// inside it. Every other check still runs.
+///
+/// ```ignore
+/// svgr!(<g id={fframes::diagnostics::ALLOW_OFF_CANVAS}>{falling_labels}</g>)
+/// // or, when several groups need their own id:
+/// svgr!(<g id="fframes-allow-offcanvas-confetti">...</g>)
+/// ```
+pub const ALLOW_OFF_CANVAS: &str = "fframes-allow-offcanvas";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Severity {
@@ -220,11 +231,17 @@ pub fn inspect_tree(tree: &usvgr::Tree, width: f32, height: f32) -> Vec<Diagnost
         diagnostics.push(Diagnostic::EmptyFrame);
     }
 
-    inspect_group(root, width, height, &mut diagnostics);
+    inspect_group(root, width, height, false, &mut diagnostics);
     diagnostics
 }
 
-fn inspect_group(group: &usvgr::Group, width: f32, height: f32, out: &mut Vec<Diagnostic>) {
+fn inspect_group(
+    group: &usvgr::Group,
+    width: f32,
+    height: f32,
+    allow_off_canvas: bool,
+    out: &mut Vec<Diagnostic>,
+) {
     if !group.abs_transform().is_finite() {
         out.push(Diagnostic::InvalidTransform {
             id: group.id().to_owned(),
@@ -243,7 +260,9 @@ fn inspect_group(group: &usvgr::Group, width: f32, height: f32, out: &mut Vec<Di
                 {
                     check_transforms(group, out);
                 } else {
-                    inspect_group(group, width, height, out);
+                    let allow_off_canvas =
+                        allow_off_canvas || group.id().starts_with(ALLOW_OFF_CANVAS);
+                    inspect_group(group, width, height, allow_off_canvas, out);
                 }
             }
             usvgr::Node::Text(text) => {
@@ -251,6 +270,9 @@ fn inspect_group(group: &usvgr::Group, width: f32, height: f32, out: &mut Vec<Di
                     out.push(Diagnostic::InvalidTransform {
                         id: text.id().to_owned(),
                     });
+                    continue;
+                }
+                if allow_off_canvas {
                     continue;
                 }
 
@@ -368,6 +390,9 @@ mod tests {
             <text x="10" y="50" font-size="10">ok</text>
             <clipPath id="c"><rect width="200" height="100"/></clipPath>
             <g clip-path="url(#c)"><text x="150" y="50" font-size="40">scrolling</text></g>
+            <g id="fframes-allow-offcanvas-rain"><g transform="translate(0 10)">
+                <text x="150" y="50" font-size="40">falling</text>
+            </g></g>
         </svg>"#;
         let tree = usvgr::Tree::from_str(svg, &options, &fontdb).unwrap();
         let diagnostics = inspect_tree(&tree, 200., 100.);
@@ -385,7 +410,7 @@ mod tests {
         assert!(
             !diagnostics
                 .iter()
-                .any(|d| matches!(d, Diagnostic::TextClipped { text, .. } | Diagnostic::TextOffCanvas { text, .. } if text == "ok" || text == "scrolling"))
+                .any(|d| matches!(d, Diagnostic::TextClipped { text, .. } | Diagnostic::TextOffCanvas { text, .. } if text == "ok" || text == "scrolling" || text == "falling"))
         );
     }
 }
