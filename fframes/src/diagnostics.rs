@@ -16,16 +16,14 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::sync::Mutex;
 
-/// Id prefix of a `<g>` whose text may leave the canvas on purpose (falling or scrolling
-/// items, entrances from off screen): the tree walk reports no clipped or off-canvas text
-/// inside it. Every other check still runs.
-///
-/// ```ignore
-/// svgr!(<g id={fframes::diagnostics::ALLOW_OFF_CANVAS}>{falling_labels}</g>)
-/// // or, when several groups need their own id:
-/// svgr!(<g id="fframes-allow-offcanvas-confetti">...</g>)
-/// ```
-pub const ALLOW_OFF_CANVAS: &str = "fframes-allow-offcanvas";
+/// `data-fframes-inspect` value of a `<g>` whose text may leave the canvas on purpose
+/// (falling or scrolling items, entrances from off screen): the tree walk reports no clipped
+/// or off-canvas text inside it. Every other check still runs.
+pub const ALLOW_OFF_CANVAS: &str = "allow-offcanvas";
+
+/// Appended to clipped and off-canvas text findings.
+const ALLOW_OFF_CANVAS_HINT: &str =
+    "if it leaves the canvas on purpose, wrap it in <g data-fframes-inspect=\"allow-offcanvas\">";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -108,11 +106,11 @@ impl std::fmt::Display for Diagnostic {
             | Diagnostic::RendererWarning { message } => write!(f, "{message}"),
             Diagnostic::TextClipped { text, .. } => write!(
                 f,
-                "text \"{text}\" is cut off by the canvas edge (x={x:.0} y={y:.0} w={w:.0} h={h:.0})"
+                "text \"{text}\" is cut off by the canvas edge (x={x:.0} y={y:.0} w={w:.0} h={h:.0}); {ALLOW_OFF_CANVAS_HINT}"
             ),
             Diagnostic::TextOffCanvas { text, .. } => write!(
                 f,
-                "text \"{text}\" is outside the canvas (x={x:.0} y={y:.0} w={w:.0} h={h:.0})"
+                "text \"{text}\" is outside the canvas (x={x:.0} y={y:.0} w={w:.0} h={h:.0}); {ALLOW_OFF_CANVAS_HINT}"
             ),
             Diagnostic::InvalidTransform { id } => {
                 write!(f, "node \"{id}\" has a NaN or infinite transform")
@@ -260,8 +258,11 @@ fn inspect_group(
                 {
                     check_transforms(group, out);
                 } else {
-                    let allow_off_canvas =
-                        allow_off_canvas || group.id().starts_with(ALLOW_OFF_CANVAS);
+                    let allow_off_canvas = allow_off_canvas
+                        || group
+                            .fframes_inspect()
+                            .split_whitespace()
+                            .any(|value| value == ALLOW_OFF_CANVAS);
                     inspect_group(group, width, height, allow_off_canvas, out);
                 }
             }
@@ -390,7 +391,7 @@ mod tests {
             <text x="10" y="50" font-size="10">ok</text>
             <clipPath id="c"><rect width="200" height="100"/></clipPath>
             <g clip-path="url(#c)"><text x="150" y="50" font-size="40">scrolling</text></g>
-            <g id="fframes-allow-offcanvas-rain"><g transform="translate(0 10)">
+            <g data-fframes-inspect="allow-offcanvas"><g transform="translate(0 10)">
                 <text x="150" y="50" font-size="40">falling</text>
             </g></g>
         </svg>"#;

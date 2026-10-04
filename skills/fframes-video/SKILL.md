@@ -105,9 +105,7 @@ After every change:
    reports missing images, fonts or glyphs, text cut off by the edge of the canvas, invalid
    SVG (zero-sized rectangles, bad radii), broken transforms and panics, each with its time
    and scene. It exits with code 2 on errors. Fix everything it reports. A warning that only
-   appears on a scene's first frames is usually an entrance; check it with a strip. Text that
-   leaves the canvas on purpose (falling or scrolling labels) goes into
-   `<g id={fframes::diagnostics::ALLOW_OFF_CANVAS}>` so `inspect` stops reporting it.
+   appears on a scene's first frames is usually an entrance; check it with a strip.
 3. `$R strip <scene or range> -n 12` writes a contact sheet (`strip.png`): evenly spaced frames
    in one labelled image. Open it with your image tool. It is the fastest way to judge layout,
    rhythm and motion.

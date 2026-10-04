@@ -612,10 +612,6 @@ Global flags: `--json` (one JSON document on stdout, JSON progress events on std
 (`IntroScene` also matches), `#3`, `Intro[1]`, `Intro@1.5s`/`@50%`/`@end`; ranges `a..b`,
 `a..`, `..b`, `all` or a scene name.
 
-- Text that leaves the canvas on purpose (falling or scrolling labels) goes into
-  `<g id={fframes::diagnostics::ALLOW_OFF_CANVAS}>`; `inspect` then skips the clipped and
-  off-canvas text checks inside it. Several groups can use ids that start with the same
-  prefix, e.g. `id="fframes-allow-offcanvas-confetti"`.
 - Backends: `fframes::cpu::CpuRenderingBackend` (default, tiny-skia, multi-threaded) or the
   Skia backend from `fframes_skia_renderer` with `SkiaFFramesRenderer::new_vulkan(&SkiaVulkanCtx::new(W, H)?, SkiaPipelineConfig { .. })`
   (`features = ["vulkan"]`; `new_metal` with `metal`). The Skia backend walks the `svgr!` tree
