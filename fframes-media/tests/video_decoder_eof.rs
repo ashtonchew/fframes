@@ -1,10 +1,11 @@
 #![cfg(not(target_arch = "wasm32"))]
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use fframes_media::FFmpegDecoder;
+use fframes_media::{FFmpegDecoder, FrameConvertOptions, ResizeVideoFrame};
 
 const FPS: usize = 30;
 const FRAME_COUNT: i64 = 300;
@@ -171,4 +172,53 @@ fn last_frame_is_shown_until_the_stream_ends_at_a_higher_fps() {
     assert!(unsafe { decoder.decode_up_to(59) }.unwrap());
     let frame = decoder.get_raw_frame();
     assert!((unsafe { frame.timestamp_seconds() } - last_frame_seconds).abs() < 0.0001);
+}
+
+fn convert_frame(decoder: &mut FFmpegDecoder, index: i64, size: Option<(u32, u32)>) -> Vec<u8> {
+    let options = size.map(|(width, height)| FrameConvertOptions {
+        resize: ResizeVideoFrame { width, height },
+    });
+    let (width, height) = size.unwrap_or((32, 32));
+    unsafe {
+        assert!(
+            decoder.decode_up_to(index).unwrap(),
+            "missing frame {index}"
+        );
+        let image = decoder
+            .get_raw_frame()
+            .convert_last_decoded_frame_into_svg_image(options.as_ref())
+            .unwrap();
+        assert_eq!((image.width, image.height), (width, height));
+        assert_eq!(
+            image.data.len(),
+            (width * height * 4) as usize,
+            "wrong data length for frame {index} at {width}x{height}"
+        );
+        image.data.to_vec()
+    }
+}
+
+#[test]
+fn frames_can_be_requested_at_a_larger_size_than_before() {
+    let video = VideoFixture::new(0);
+    // The 32x32 stream at its own size, grown, shrunk and grown again, four frames each.
+    let sizes = [None, Some((256, 256)), Some((16, 16)), Some((256, 256))];
+    // The CPU renderer decodes into a single reused buffer, the Skia pipeline into a ring.
+    for buffer_size in [1, 3] {
+        let mut decoder = unsafe { FFmpegDecoder::new(&video.path(), FPS, buffer_size) }.unwrap();
+        // Decoders that are only ever asked for one size
+        let mut references = HashMap::new();
+        for index in 0..16 {
+            let size = sizes[index as usize / 4];
+            let image = convert_frame(&mut decoder, index, size);
+            let reference = references
+                .entry(size)
+                .or_insert_with(|| unsafe { FFmpegDecoder::new(&video.path(), FPS, 1) }.unwrap());
+            assert!(
+                image == convert_frame(reference, index, size),
+                "frame {index} at {size:?} differs from a decoder that only converts to that size \
+                 (buffer size {buffer_size})"
+            );
+        }
+    }
 }
