@@ -181,6 +181,54 @@ fn a_frame_requested_again_at_another_size_is_converted_to_that_size() {
 }
 
 #[test]
+fn a_frame_is_converted_again_after_a_failed_conversion() {
+    let video = VideoFixture::new(0);
+    let thumbnail = FrameConvertOptions {
+        resize: ResizeVideoFrame {
+            width: 16,
+            height: 16,
+        },
+    };
+    // The scaler can't be created for an empty output
+    let empty = FrameConvertOptions {
+        resize: ResizeVideoFrame {
+            width: 0,
+            height: 0,
+        },
+    };
+    for buffer_size in [1, 3] {
+        unsafe {
+            let mut decoder = FFmpegDecoder::new(&video.path(), FPS, buffer_size).unwrap();
+            assert!(decoder.decode_up_to(5).unwrap());
+            let frame = decoder.get_raw_frame();
+            frame
+                .convert_last_decoded_frame_into_svg_image(Some(&thumbnail))
+                .unwrap();
+            assert!(
+                frame
+                    .convert_last_decoded_frame_into_svg_image(Some(&empty))
+                    .is_err()
+            );
+
+            let image = frame
+                .convert_last_decoded_frame_into_svg_image(Some(&thumbnail))
+                .unwrap();
+            assert_eq!(
+                (image.width, image.height),
+                (16, 16),
+                "buffer size {buffer_size}"
+            );
+            // A buffer last sized for a larger output can be longer than the image
+            assert!(
+                image.data.len() >= 16 * 16 * 4,
+                "{} bytes for a 16x16 image (buffer size {buffer_size})",
+                image.data.len()
+            );
+        }
+    }
+}
+
+#[test]
 fn last_frame_is_shown_until_the_stream_ends_at_a_higher_fps() {
     // 48 frames at 24 fps last 2 s, i.e. 60 frames at 30 fps. Offset 59 (1.967 s) falls after the
     // last frame's timestamp (1.958 s) but before the end, so it must still show that frame.
