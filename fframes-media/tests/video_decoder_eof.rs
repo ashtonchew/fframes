@@ -17,8 +17,12 @@ impl VideoFixture {
         Self::with_rate(b_frames, FPS, FRAME_COUNT)
     }
 
-    // Requires the ffmpeg CLI with libx264, like the end-to-end render tests.
     fn with_rate(b_frames: usize, rate: usize, frames: i64) -> Self {
+        Self::with_size(b_frames, rate, frames, (32, 32))
+    }
+
+    // Requires the ffmpeg CLI with libx264, like the end-to-end render tests.
+    fn with_size(b_frames: usize, rate: usize, frames: i64, (width, height): (u32, u32)) -> Self {
         static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
         let dir = std::env::temp_dir().join(format!(
             "fframes-decoder-eof-{}-{}",
@@ -36,7 +40,7 @@ impl VideoFixture {
                 "-f",
                 "lavfi",
                 "-i",
-                &format!("testsrc2=size=32x32:rate={rate}"),
+                &format!("testsrc2=size={width}x{height}:rate={rate}"),
                 "-frames:v",
                 &frames.to_string(),
                 "-c:v",
@@ -219,6 +223,22 @@ fn frames_can_be_requested_at_a_larger_size_than_before() {
                 "frame {index} at {size:?} differs from a decoder that only converts to that size \
                  (buffer size {buffer_size})"
             );
+        }
+    }
+}
+
+#[test]
+fn frames_can_be_converted_at_widths_that_are_not_a_multiple_of_16() {
+    // At their own size, swscale's x86 YUV to RGB converter writes these rows in whole blocks
+    // of 16 pixels, from 56 bytes (2 px wide) to 8 bytes (46 px) past the last one
+    for width in [2, 40, 42, 44, 46] {
+        let video = VideoFixture::with_size(0, FPS, 8, (width, 32));
+        for buffer_size in [1, 3] {
+            let mut decoder =
+                unsafe { FFmpegDecoder::new(&video.path(), FPS, buffer_size) }.unwrap();
+            for index in 0..8 {
+                convert_frame(&mut decoder, index, Some((width, 32)));
+            }
         }
     }
 }
