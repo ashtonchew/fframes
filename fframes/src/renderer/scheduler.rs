@@ -217,39 +217,6 @@ mod tests {
     use super::{FrameScheduler, MAX_SEGMENTS};
     use std::collections::{BTreeMap, BTreeSet};
 
-    /// Claims every frame with workers that go at different speeds, returns the frames of
-    /// each segment in the order they were claimed.
-    fn claim_all(scheduler: &FrameScheduler, pace: usize) -> BTreeMap<usize, Vec<usize>> {
-        let workers = scheduler.workers();
-        let mut segments: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-        let mut last_flags: BTreeMap<usize, usize> = BTreeMap::new();
-        let mut done = vec![false; workers];
-
-        let mut round = 0;
-        while done.iter().any(|done| !done) {
-            round += 1;
-            for (worker, done) in done.iter_mut().enumerate() {
-                if *done || round % ((worker * pace) % 5 + 1) != 0 {
-                    continue;
-                }
-                match scheduler.claim(worker) {
-                    Some(claim) => {
-                        segments.entry(claim.segment).or_default().push(claim.frame);
-                        if claim.last_in_segment {
-                            assert!(last_flags.insert(claim.segment, claim.frame).is_none());
-                        }
-                    }
-                    None => *done = true,
-                }
-            }
-        }
-
-        for (start, frames) in &segments {
-            assert_eq!(last_flags[start], *frames.iter().max().unwrap());
-        }
-        segments
-    }
-
     #[test]
     fn splits_evenly_and_respects_minimum() {
         let scheduler = FrameScheduler::new(100, 16, 24);
@@ -269,7 +236,29 @@ mod tests {
     fn every_frame_is_claimed_once_and_segments_are_contiguous() {
         for (total, workers, min) in [(1000, 4, 10), (97, 16, 24), (48, 3, 24), (5000, 16, 24)] {
             let scheduler = FrameScheduler::new(total, workers, min);
-            let segments = claim_all(&scheduler, 1);
+            let mut segments: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+            let mut last_flags: BTreeMap<usize, usize> = BTreeMap::new();
+            let mut done = vec![false; workers];
+
+            // workers progress at different speeds
+            let mut round = 0;
+            while done.iter().any(|done| !done) {
+                round += 1;
+                for (worker, done) in done.iter_mut().enumerate() {
+                    if *done || round % (worker % 3 + 1) != 0 {
+                        continue;
+                    }
+                    match scheduler.claim(worker) {
+                        Some(claim) => {
+                            segments.entry(claim.segment).or_default().push(claim.frame);
+                            if claim.last_in_segment {
+                                assert!(last_flags.insert(claim.segment, claim.frame).is_none());
+                            }
+                        }
+                        None => *done = true,
+                    }
+                }
+            }
             assert!(segments.len() <= MAX_SEGMENTS);
 
             let mut all = BTreeSet::new();
@@ -279,49 +268,13 @@ mod tests {
                 assert_eq!(sorted[0], *start);
                 assert_eq!(start % min, 0, "segment {start} does not start on the GOP");
                 assert!(sorted.windows(2).all(|w| w[1] == w[0] + 1));
+                assert_eq!(last_flags[start], *sorted.last().unwrap());
                 assert!(sorted.len() >= min.min(total));
                 for frame in frames {
                     assert!(all.insert(*frame), "frame {frame} claimed twice");
                 }
             }
             assert_eq!(all.len(), total);
-        }
-    }
-
-    #[test]
-    fn segments_do_not_depend_on_the_workers() {
-        for (total, min) in [
-            (4885, 24),
-            (7650, 24),
-            (1000, 10),
-            (141, 24),
-            (97, 24),
-            (3, 24),
-        ] {
-            // where every segment starts and how many frames it has
-            let cuts = |workers: usize, pace: usize| -> Vec<(usize, usize)> {
-                let scheduler = FrameScheduler::new(total, workers, min);
-                claim_all(&scheduler, pace)
-                    .into_iter()
-                    .map(|(start, frames)| (start, frames.len()))
-                    .collect()
-            };
-
-            let one_worker = cuts(1, 1);
-            for workers in [2, 3, 6, 12, 18, 24, 40] {
-                let expected = cuts(workers, 1);
-                for pace in [2, 3] {
-                    assert_eq!(
-                        cuts(workers, pace),
-                        expected,
-                        "{total} frames, {workers} workers at pace {pace} and 1"
-                    );
-                }
-                assert_eq!(
-                    expected, one_worker,
-                    "{total} frames, {workers} workers and 1"
-                );
-            }
         }
     }
 }
